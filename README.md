@@ -16,7 +16,7 @@ cargo build --release
 ./target/release/grammar-watch /path/to/session.jsonl
 ```
 
-在另一個 tmux window 跑它，工作時瞄一眼即可。
+在另一個 tmux window 或 Herdr 跑它，工作時瞄一眼即可。
 
 ### 互動式選單
 

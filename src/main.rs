@@ -8,7 +8,7 @@
 //   grammar-watch                       # 互動式選單：選專案、選 session（或等新 session）
 //   grammar-watch /path/to/session.jsonl   # 直接指定檔案也可以
 //
-// 在另一個 tmux window 跑它，工作時瞄一眼即可。
+// 在另一個 tmux window 或 Herdr 跑它，工作時瞄一眼即可。
 
 mod feedback;
 mod picker;
