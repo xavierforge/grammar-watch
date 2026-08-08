@@ -3,3 +3,6 @@
 
 # debugging screenshots, not part of the project
 Screenshot*.png
+
+# 本地審查紀錄（cross-check verdict），給 /ship 之類的工具讀，不進版本庫
+/.review
