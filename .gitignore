@@ -1,0 +1,5 @@
+# Rust build output
+/target
+
+# debugging screenshots, not part of the project
+Screenshot*.png

@@ -1,0 +1,32 @@
+[package]
+name = "grammar-watch"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "grammar-watch"
+path = "src/main.rs"
+
+[dependencies]
+# Rig 0.40 — 底層送 request 用（Anthropic provider）
+# 0.40 起 crate lib 名稱從 rig 改為 rig_core，這裡用 package rename 讓程式碼仍以 `rig::` 引用
+rig = { package = "rig-core", version = "0.40" }
+# 非同步 runtime
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
+# 檔案系統事件監看（inotify / FSEvents 的跨平台包裝）
+notify = "6"
+# JSONL 每行的解析
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# CLI 參數
+clap = { version = "4", features = ["derive"] }
+# 終端機顏色
+owo-colors = "4"
+# 自製選單（select.rs）的按鍵讀取與畫面控制
+crossterm = "0.28"
+# 選單文字依「顯示寬度」截斷（CJK 一字兩格），避免折行弄壞重繪
+unicode-width = "0.2"
+# 錯誤處理
+anyhow = "1"
+# 算出原句與建議句的差異，逐字標記改了哪裡
+similar = "2"
