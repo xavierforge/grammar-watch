@@ -3,17 +3,34 @@
 監看單一 Claude Code session 的 jsonl，偵測到你新打的 prompt 就送給 LLM，
 在終端機印出「你打了什麼 / 建議怎麼打 / 文法或單字的改進點」。
 
+## 安裝
+
+不需要 Rust 工具鏈，擇一即可：
+
+```bash
+# Homebrew（macOS / Linux）
+brew install xavierforge/tap/grammar-watch
+
+# 或安裝腳本
+curl -LsSf https://github.com/xavierforge/grammar-watch/releases/latest/download/grammar-watch-installer.sh | sh
+```
+
+有 Rust 的人也可以從原始碼裝：
+
+```bash
+cargo install --git https://github.com/xavierforge/grammar-watch
+```
+
 ## 使用
 
 ```bash
 export ANTHROPIC_API_KEY=sk-...
-cargo build --release
 
 # 不帶參數：互動式選單（推薦）
-./target/release/grammar-watch
+grammar-watch
 
 # 或直接指定檔案
-./target/release/grammar-watch /path/to/session.jsonl
+grammar-watch /path/to/session.jsonl
 ```
 
 在另一個 tmux window 或 Herdr 跑它，工作時瞄一眼即可。
