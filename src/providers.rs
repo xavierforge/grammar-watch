@@ -77,7 +77,12 @@ where
 pub fn build(provider: Provider, model: &str, preamble: &str) -> Result<Asker> {
     let env = provider.env_key();
     if std::env::var(env).is_err() {
-        anyhow::bail!("找不到 {env}。請先 export {env}=你的key");
+        anyhow::bail!(
+            "找不到 {env}。請先 export {env}=你的key\n\
+             也可以用 --provider 換別家供應商：anthropic / openrouter / gemini / openai\n\
+             （金鑰分別讀 ANTHROPIC_API_KEY / OPENROUTER_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY，\
+             模型用 --model 指定，省略就用該家的預設）"
+        );
     }
 
     let ctx = || format!("建立 {} client 失敗", provider.name());
