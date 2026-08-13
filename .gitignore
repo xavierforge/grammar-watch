@@ -6,3 +6,7 @@ Screenshot*.png
 
 # 本地審查紀錄（cross-check verdict），給 /ship 之類的工具讀，不進版本庫
 /.review
+
+# demo 錄影產出（要放 README 再挑著加回來）
+demo/*.gif
+demo/*.mp4
