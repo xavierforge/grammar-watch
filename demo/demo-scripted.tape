@@ -15,6 +15,8 @@ Set Height 900
 Set Padding 24
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 60ms
+# 中文和符號要用有 CJK 字面的字型 fallback，不然全是亂碼豆腐
+Set FontFamily "MesloLGLDZ Nerd Font, JetBrains Mono, PingFang TC, Hiragino Sans GB, Heiti TC"
 
 # 背景啟動餵稿器（觀眾看不到這行）
 Hide

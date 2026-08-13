@@ -17,14 +17,20 @@ Set Height 950
 Set Padding 16
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 55ms
-# 中文和符號要用有 CJK 字面的字型 fallback，不然全是亂碼豆腐
-Set FontFamily "JetBrains Mono, PingFang TC, Hiragino Sans GB, Heiti TC"
+# 中文和符號要用有 CJK 字面的字型 fallback，不然全是亂碼豆腐；
+# Nerd Font 放第一位，zsh prompt 的圖示才有字面
+Set FontFamily "MesloLGLDZ Nerd Font, JetBrains Mono, PingFang TC, Hiragino Sans GB, Heiti TC"
 
 # 隱藏階段：setup.sh 用 herdr 搭場景（選專案、進等待狀態、開 Claude Code）
 Hide
 Type "./setup.sh"
 Enter
 Sleep 18
+# 收掉左邊側邊欄（prefix+b）。注意：Ctrl+S 和 b 一定要連續送，
+# 中間插 Sleep 的話 chord 不會成立
+Ctrl+S
+Type "b"
+Sleep 1
 Show
 
 # 七句示範：每句一種台灣工程師常見錯誤，打完等左邊回覆＋右邊講評
@@ -56,9 +62,10 @@ Type "Add a retry with exponential backoff to the fetch helper, capped at three 
 Enter
 Sleep 13
 
-# 等 setup.sh 的定時收場把 demo session 停掉（時間互相對齊），shell 拿回控制權
-Sleep 22
+# 收尾：prefix+q detach，setup.sh 接著自己收掉 session，shell 拿回控制權
 Hide
+Ctrl+S
+Type "q"
 Sleep 3
 Type "clear"
 Enter

@@ -45,11 +45,9 @@ herdr session delete gwdemo 2>/dev/null || true
     sleep 6
     # 若跳出「信任這個資料夾嗎」對話框就按掉；已信任的話這一下沒有作用
     herdr pane send-keys "$LEFT" Enter > /dev/null
-
-    # 定時收場：時間要跟 demo.tape 的長度對齊（tape 最後留了緩衝）。
-    # session 一停，attach 就結束，vhs 的 shell 拿回控制權打結尾 CTA。
-    sleep 135
-    herdr session stop gwdemo > /dev/null 2>&1 || true
 ) &
 
-exec herdr --session gwdemo
+# 不能用 exec：attach 結束（tape 按 prefix+q detach）之後，
+# 還要靠這個 shell 收掉 session、讓 vhs 打結尾的 CTA
+herdr --session gwdemo
+herdr session stop gwdemo > /dev/null 2>&1 || true
