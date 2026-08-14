@@ -3,6 +3,8 @@
 監看單一 Claude Code session 的 jsonl，偵測到你新打的 prompt 就送給 LLM，
 在終端機印出「你打了什麼 / 建議怎麼打 / 文法或單字的改進點」。
 
+![demo：左邊打 prompt 給 Claude Code，右邊即時講評英文](demo/demo.gif)
+
 ## 安裝
 
 不需要 Rust 工具鏈，擇一即可：
