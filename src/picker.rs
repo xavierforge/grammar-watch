@@ -158,13 +158,14 @@ fn scan_projects(root: &Path) -> Result<Vec<Project>> {
 
 // ── session 掃描 ───────────────────────────────────────────────
 
-struct Session {
-    path: PathBuf,
-    mtime: SystemTime,
+pub(crate) struct Session {
+    pub(crate) path: PathBuf,
+    pub(crate) mtime: SystemTime,
 }
 
-/// 列出一個專案資料夾裡全部的 session jsonl 和各自的 mtime
-fn sessions_in(dir: &Path) -> Result<Vec<Session>> {
+/// 列出一個專案資料夾裡全部的 session jsonl 和各自的 mtime。
+/// main 的跟隨模式也用它偵測專案裡新出現的 session。
+pub(crate) fn sessions_in(dir: &Path) -> Result<Vec<Session>> {
     let mut out = Vec::new();
     for entry in fs::read_dir(dir)
         .with_context(|| format!("讀不到 {}", dir.display()))?

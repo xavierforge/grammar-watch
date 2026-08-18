@@ -71,6 +71,8 @@ export OPENROUTER_API_KEY=sk-or-...
 
 - 預設只看「啟動之後」的新 prompt。要從頭檢查整個 session 加 `--from-start`
   （`--from_start` 也可）；「等下一個新 session」模式一律從頭讀。
+- **自動跟隨**：監看中若同一個專案出現新的 session（例如你按了 `/clear`
+  或開了新對話），會自動切換過去從頭講評，不用重開。
 - 純中文或純指令（沒有英文字母）的行會自動跳過。
 
 ## Claude Code 的 session jsonl 在哪

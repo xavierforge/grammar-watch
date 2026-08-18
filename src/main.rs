@@ -17,6 +17,7 @@ mod providers;
 mod select;
 mod transcript;
 
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -90,7 +91,7 @@ async fn main() -> Result<()> {
 
     // 沒給路徑就開互動式選單。「等新 session」回傳的檔案一定要從頭讀：
     // jsonl 是打出第一句才建檔的，不從頭讀第一句就永遠漏掉。
-    let (path, from_start) = match args.jsonl {
+    let (mut path, from_start) = match args.jsonl {
         Some(p) => {
             let p = p
                 .canonicalize()
@@ -133,7 +134,21 @@ async fn main() -> Result<()> {
             .len()
     };
 
-    // notify 的事件走 std channel 送過來
+    // 跟隨模式：監看的對象是「這個專案」而不是死盯一個檔案。
+    // 使用者在 Claude Code 按 /clear 或開新對話會產生新的 jsonl，
+    // 舊檔從此不會再有新內容；偵測到新檔就自動切過去（從頭讀），
+    // 講評才不會無聲無息斷掉。known 記的是啟動當下已存在的檔案，
+    // 只有「之後才出現」的才算新 session。
+    let dir = path
+        .parent()
+        .context("session 檔沒有上層資料夾")?
+        .to_path_buf();
+    let mut known: BTreeSet<PathBuf> =
+        picker::sessions_in(&dir)?.into_iter().map(|s| s.path).collect();
+    known.insert(path.clone());
+
+    // notify 的事件走 std channel 送過來。監看整個資料夾：
+    // 檔案內容變動和新檔出現都會有事件。
     let (tx, rx) = channel();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
         if let Ok(ev) = res {
@@ -141,8 +156,8 @@ async fn main() -> Result<()> {
         }
     })?;
     watcher
-        .watch(&path, RecursiveMode::NonRecursive)
-        .with_context(|| format!("無法監看：{}", path.display()))?;
+        .watch(&dir, RecursiveMode::NonRecursive)
+        .with_context(|| format!("無法監看：{}", dir.display()))?;
 
     // 先跑一次：從頭讀時要立刻把既有內容讀完，不能乾等下一個事件。
     drain(&path, &mut offset, &ask).await?;
@@ -157,6 +172,25 @@ async fn main() -> Result<()> {
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}      // 沒事件：也讀一次（輪詢）
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
         }
+
+        // 專案裡出現啟動後才建立的新 session：把舊檔剩下的講評完，切過去從頭讀
+        match newest_unknown(&dir, &mut known) {
+            Ok(Some(new_path)) => {
+                if let Err(e) = drain(&path, &mut offset, &ask).await {
+                    eprintln!("{} {}", "讀取失敗：".red(), e);
+                }
+                path = new_path;
+                offset = 0;
+                println!(
+                    "{} {}",
+                    "切換到新 session：".green().bold(),
+                    paths::display(&path).dimmed()
+                );
+            }
+            Ok(None) => {}
+            Err(e) => eprintln!("{} {}", "掃描專案失敗：".red(), e),
+        }
+
         // drain 的錯誤不該讓整個程式掛掉（例如寫入當下短暫開檔失敗），記一下繼續輪詢。
         if let Err(e) = drain(&path, &mut offset, &ask).await {
             eprintln!("{} {}", "讀取失敗：".red(), e);
@@ -164,6 +198,23 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// 專案資料夾裡「啟動後才出現」的 session jsonl；同時出現多個（罕見）挑最新的。
+/// 看過的檔案都記進 known，同一個檔不會回報第二次。
+fn newest_unknown(dir: &Path, known: &mut BTreeSet<PathBuf>) -> Result<Option<PathBuf>> {
+    let mut fresh: Vec<picker::Session> = picker::sessions_in(dir)?
+        .into_iter()
+        .filter(|s| !known.contains(&s.path))
+        .collect();
+    if fresh.is_empty() {
+        return Ok(None);
+    }
+    fresh.sort_by_key(|s| s.mtime);
+    for s in &fresh {
+        known.insert(s.path.clone());
+    }
+    Ok(fresh.pop().map(|s| s.path))
 }
 
 /// 從 offset 讀出所有「完整的新行」，逐行講評，並把 offset 前進到已消化的位元組。
