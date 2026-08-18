@@ -17,6 +17,7 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use serde::Deserialize;
 
+use crate::paths::tildify;
 use crate::select::{select, Outcome};
 
 /// 選單的結果。New 是「等到新檔案剛出現」才回傳的，
@@ -126,14 +127,6 @@ impl Project {
 fn projects_root() -> Result<PathBuf> {
     let home = std::env::var("HOME").context("讀不到 HOME 環境變數")?;
     Ok(PathBuf::from(home).join(".claude").join("projects"))
-}
-
-/// $HOME 前綴縮成 ~，選單一行塞得下
-fn tildify(path: &str) -> String {
-    match std::env::var("HOME") {
-        Ok(home) if path.starts_with(&home) => format!("~{}", &path[home.len()..]),
-        _ => path.to_string(),
-    }
 }
 
 /// 掃根目錄底下的專案資料夾，只收「至少有一個 session jsonl」的
@@ -280,7 +273,11 @@ fn wait_new_session(project: &Project) -> Result<PathBuf> {
         std::thread::sleep(Duration::from_millis(300));
         for s in sessions_in(dir)? {
             if !known.contains(&s.path) {
-                println!("{} {}", "接上新 session：".green().bold(), s.path.display().dimmed());
+                println!(
+                    "{} {}",
+                    "接上新 session：".green().bold(),
+                    crate::paths::display(&s.path).dimmed()
+                );
                 return Ok(s.path);
             }
         }

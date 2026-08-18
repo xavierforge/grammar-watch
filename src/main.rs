@@ -11,6 +11,7 @@
 // 在另一個 tmux window 或 Herdr 跑它，工作時瞄一眼即可。
 
 mod feedback;
+mod paths;
 mod picker;
 mod providers;
 mod select;
@@ -114,7 +115,7 @@ async fn main() -> Result<()> {
     println!(
         "{} {}",
         "監看中：".green().bold(),
-        path.display().dimmed()
+        paths::display(&path).dimmed()
     );
     println!(
         "{} {}",
