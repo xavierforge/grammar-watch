@@ -72,8 +72,8 @@ pub fn print(fb: &Feedback) {
     match (&fb.orig, &fb.sugg) {
         // 小修：紅底原句＋綠底建議上下對照，最清楚。
         (Some(o), Some(s)) if worth_diffing(o, s) => {
-            println!("{}{}{}", "原句".cyan().bold(), "：".cyan(), highlight_deletions(o, s));
-            println!("{}{}{}", "建議".green().bold(), "：".green(), highlight_insertions(o, s));
+            println!("{}{}{}", "原句".cyan().bold(), "：".cyan(), highlight(o, s, Side::Deletions));
+            println!("{}{}{}", "建議".green().bold(), "：".green(), highlight(o, s, Side::Insertions));
         }
         // 大改寫：原句與建議各印整行。
         (Some(o), Some(s)) => {
@@ -143,36 +143,34 @@ fn worth_diffing(orig: &str, sugg: &str) -> bool {
     TextDiff::from_words(orig, sugg).ratio() >= 0.6
 }
 
-/// 回傳原句字串，把「相對建議句被刪掉/改掉的字」用紅底標出來，其餘字暗掉。
-/// from_words 會把空白也切成獨立 token；純空白就算被改動也不要上底色，
-/// 否則背景框會多出頭尾的空格、看起來歪掉。只有「真的有字」的 token 才上底色。
-fn highlight_deletions(orig: &str, sugg: &str) -> String {
-    let mut out = String::new();
-    for change in TextDiff::from_words(orig, sugg).iter_all_changes() {
-        let v = change.value();
-        match change.tag() {
-            ChangeTag::Delete if !v.trim().is_empty() => {
-                out.push_str(&v.on_red().white().bold().to_string())
-            }
-            ChangeTag::Delete | ChangeTag::Equal => out.push_str(&v.dimmed().to_string()),
-            ChangeTag::Insert => {} // 新增的字只在建議行顯示
-        }
-    }
-    out
+/// 逐字上色要標哪一側：原句行標被刪的字（紅底）、建議行標新增的字（綠底）
+#[derive(Clone, Copy, PartialEq)]
+enum Side {
+    Deletions,
+    Insertions,
 }
 
-/// 回傳建議句字串，把「相對原句新增/改成的字」用綠底標出來，其餘字暗掉（純空白不上底色）。
-fn highlight_insertions(orig: &str, sugg: &str) -> String {
+/// 回傳上了色的一行：這一側被改動的字上底色，沒動的字暗掉，
+/// 屬於另一側的字整個跳過（各自只在自己的行顯示）。
+/// from_words 會把空白也切成獨立 token；純空白就算被改動也不要上底色，
+/// 否則背景框會多出頭尾的空格、看起來歪掉。只有「真的有字」的 token 才上底色。
+fn highlight(orig: &str, sugg: &str, side: Side) -> String {
     let mut out = String::new();
     for change in TextDiff::from_words(orig, sugg).iter_all_changes() {
         let v = change.value();
-        match change.tag() {
-            ChangeTag::Insert if !v.trim().is_empty() => {
-                out.push_str(&v.on_green().black().bold().to_string())
+        let styled = match (side, change.tag()) {
+            (Side::Deletions, ChangeTag::Delete) if !v.trim().is_empty() => {
+                v.on_red().white().bold().to_string()
             }
-            ChangeTag::Insert | ChangeTag::Equal => out.push_str(&v.dimmed().to_string()),
-            ChangeTag::Delete => {} // 被刪掉的字只在原句行顯示
-        }
+            (Side::Insertions, ChangeTag::Insert) if !v.trim().is_empty() => {
+                v.on_green().black().bold().to_string()
+            }
+            (Side::Deletions, ChangeTag::Insert) | (Side::Insertions, ChangeTag::Delete) => {
+                continue
+            }
+            _ => v.dimmed().to_string(),
+        };
+        out.push_str(&styled);
     }
     out
 }
