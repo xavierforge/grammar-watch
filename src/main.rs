@@ -17,6 +17,7 @@ mod paths;
 mod picker;
 mod providers;
 mod select;
+mod sources;
 mod transcript;
 
 use std::collections::BTreeSet;
@@ -104,25 +105,23 @@ async fn main() -> Result<()> {
 
     // 沒給路徑就開互動式選單。「等新 session」回傳的檔案一定要從頭讀：
     // jsonl 是打出第一句才建檔的，不從頭讀第一句就永遠漏掉。
-    let (mut path, from_start) = match args.jsonl {
+    // scope 是 follow 模式的掃描範圍：選單給的最準；直接指定路徑就從路徑推斷。
+    let (mut path, from_start, scope) = match args.jsonl {
         Some(p) => {
             let p = p
                 .canonicalize()
                 .with_context(|| format!("找不到檔案：{}", p.display()))?;
-            (p, args.from_start)
+            let scope = sources::Scope::for_watched_file(&p);
+            (p, args.from_start, scope)
         }
-        None => match picker::pick()? {
-            picker::Picked::Existing(p) => (
-                p.canonicalize()
-                    .with_context(|| format!("找不到檔案：{}", p.display()))?,
-                args.from_start,
-            ),
-            picker::Picked::New(p) => (
-                p.canonicalize()
-                    .with_context(|| format!("找不到檔案：{}", p.display()))?,
-                true,
-            ),
-        },
+        None => {
+            let picked = picker::pick()?;
+            let p = picked
+                .path
+                .canonicalize()
+                .with_context(|| format!("找不到檔案：{}", picked.path.display()))?;
+            (p, args.from_start || picked.from_start, picked.scope)
+        }
     };
 
     // 模型資訊印在「選完之後」：印在開場的話，選單一長就被捲出畫面外了
@@ -150,30 +149,27 @@ async fn main() -> Result<()> {
             .len()
     };
 
-    // 跟隨模式：監看的對象是「這個專案」而不是死盯一個檔案。
-    // 使用者在 Claude Code 按 /clear 或開新對話會產生新的 jsonl，
-    // 舊檔從此不會再有新內容；偵測到新檔就自動切過去（從頭讀），
-    // 講評才不會無聲無息斷掉。known 記的是啟動當下已存在的檔案，
-    // 只有「之後才出現」的才算新 session。
-    let dir = path
-        .parent()
-        .context("session 檔沒有上層資料夾")?
-        .to_path_buf();
+    // 跟隨模式：監看的對象是「這個專案的範圍」而不是死盯一個檔案。
+    // 使用者按 /clear 或開新對話會產生新的 jsonl，舊檔從此不會再有新內容；
+    // 偵測到範圍內的新檔就自動切過去（從頭讀），講評才不會無聲無息斷掉。
+    // known 記的是啟動當下已存在的檔案，只有「之後才出現」的才算新 session。
     let mut known: BTreeSet<PathBuf> =
-        picker::sessions_in(&dir)?.into_iter().map(|s| s.path).collect();
+        scope.sessions()?.into_iter().map(|s| s.path).collect();
     known.insert(path.clone());
 
-    // notify 的事件走 std channel 送過來。監看整個資料夾：
-    // 檔案內容變動和新檔出現都會有事件。
+    // notify 的事件走 std channel 送過來。監看範圍的根：
+    // 檔案內容變動和新檔出現都會有事件（事件只是提示，保證靠輪詢）。
     let (tx, rx) = channel();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
         if let Ok(ev) = res {
             let _ = tx.send(ev);
         }
     })?;
+    let (watch_dir, recursive) = scope.watch_target();
+    let mode = if recursive { RecursiveMode::Recursive } else { RecursiveMode::NonRecursive };
     watcher
-        .watch(&dir, RecursiveMode::NonRecursive)
-        .with_context(|| format!("無法監看：{}", dir.display()))?;
+        .watch(watch_dir, mode)
+        .with_context(|| format!("無法監看：{}", watch_dir.display()))?;
 
     // 先跑一次：從頭讀時要立刻把既有內容讀完，不能乾等下一個事件。
     drain(&path, &mut offset, &ask, log.as_deref()).await?;
@@ -189,8 +185,8 @@ async fn main() -> Result<()> {
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
         }
 
-        // 專案裡出現啟動後才建立的新 session：把舊檔剩下的講評完，切過去從頭讀
-        match newest_unknown(&dir, &mut known) {
+        // 範圍裡出現啟動後才建立的新 session：把舊檔剩下的講評完，切過去從頭讀
+        match scope.newest_unknown(&mut known) {
             Ok(Some(new_path)) => {
                 if let Err(e) = drain(&path, &mut offset, &ask, log.as_deref()).await {
                     eprintln!("{} {}", "讀取失敗：".red(), e);
@@ -214,23 +210,6 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-/// 專案資料夾裡「啟動後才出現」的 session jsonl；同時出現多個（罕見）挑最新的。
-/// 看過的檔案都記進 known，同一個檔不會回報第二次。
-fn newest_unknown(dir: &Path, known: &mut BTreeSet<PathBuf>) -> Result<Option<PathBuf>> {
-    let mut fresh: Vec<picker::Session> = picker::sessions_in(dir)?
-        .into_iter()
-        .filter(|s| !known.contains(&s.path))
-        .collect();
-    if fresh.is_empty() {
-        return Ok(None);
-    }
-    fresh.sort_by_key(|s| s.mtime);
-    for s in &fresh {
-        known.insert(s.path.clone());
-    }
-    Ok(fresh.pop().map(|s| s.path))
 }
 
 /// 從 offset 讀出所有「完整的新行」，逐行講評，並把 offset 前進到已消化的位元組。

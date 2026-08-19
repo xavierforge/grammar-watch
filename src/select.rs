@@ -24,6 +24,8 @@ const PAGE: usize = 8;
 pub enum Outcome<T> {
     Chosen(T),
     Back,
+    /// 使用者按了 Tab 要換分頁（只在有給 tabs 時會出現）
+    NextTab,
 }
 
 /// RAII：不管怎麼離開（含錯誤提早 return），都要把 raw mode 關掉、游標顯示回來，
@@ -51,6 +53,8 @@ struct Menu<'a, T> {
     title: &'a str,
     help: &'a str,
     entries: Vec<(String, T)>,
+    /// 分頁列：(標籤們, 目前頁)。None 就完全不畫（單一來源時的樣子）
+    tabs: Option<(&'a [String], usize)>,
     filter: String,
     /// 游標在 filtered 裡的位置
     cur: usize,
@@ -97,6 +101,22 @@ impl<T> Menu<'_, T> {
 
         let mut lines: Vec<String> = Vec::new();
         lines.push(format!("{} {}{}", "?".green().bold(), self.title.bold(), self.filter));
+        // 分頁列：目前頁亮、其他頁暗
+        if let Some((labels, active)) = self.tabs {
+            let row = labels
+                .iter()
+                .enumerate()
+                .map(|(i, l)| {
+                    if i == active {
+                        format!(" {} ", l).cyan().bold().to_string()
+                    } else {
+                        format!(" {} ", l).dimmed().to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("│");
+            lines.push(format!("  {row}"));
+        }
         lines.push(String::new());
 
         if filtered.is_empty() {
@@ -145,11 +165,13 @@ impl<T> Menu<'_, T> {
 
 /// 顯示一個單選選單，回傳選中的值；Esc（以及 back_enabled 時的 ←）回傳 Back，
 /// 讓呼叫端決定退到哪層。entries 是 (顯示文字, 值)。
+/// tabs 有給的話會畫分頁列，Tab 鍵回傳 NextTab 讓呼叫端換清單重新進來。
 pub fn select<T>(
     title: &str,
     help: &str,
     entries: Vec<(String, T)>,
     back_enabled: bool,
+    tabs: Option<(&[String], usize)>,
 ) -> Result<Outcome<T>> {
     let mut out = io::stdout();
     let guard = RawGuard::new()?;
@@ -157,6 +179,7 @@ pub fn select<T>(
         title,
         help,
         entries,
+        tabs,
         filter: String::new(),
         cur: 0,
         win: 0,
@@ -187,6 +210,11 @@ pub fn select<T>(
                     println!("{} {}{}", "✔".green().bold(), menu.title.bold(), label.cyan());
                     return Ok(Outcome::Chosen(value));
                 }
+            }
+            (KeyCode::Tab, _) if menu.tabs.is_some() => {
+                clear_frame(&mut out, menu.drawn)?;
+                drop(guard);
+                return Ok(Outcome::NextTab);
             }
             (KeyCode::Esc, _) => {
                 clear_frame(&mut out, menu.drawn)?;
@@ -260,6 +288,7 @@ mod tests {
             title: "t",
             help: "h",
             entries: labels.iter().enumerate().map(|(i, l)| (l.to_string(), i)).collect(),
+            tabs: None,
             filter: String::new(),
             cur: 0,
             win: 0,

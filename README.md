@@ -135,16 +135,20 @@ cat ~/gw-journal.md | claude -p "歸納這份英文講評日誌最常見的錯�
   或開了新對話），會自動切換過去從頭講評，不用重開。
 - 純中文或純指令（沒有英文字母）的行會自動跳過。
 
-## 也支援 OpenAI Codex（實驗性）
+## 也支援 OpenAI Codex
 
-直接把 Codex 的 rollout 檔餵給它就能監看講評（格式自動辨識，不用旗標）：
+Codex 的 session 是一等公民：兩家都裝的話，選單頂部會出現分頁列，
+**Tab 鍵**在 Claude Code 和 Codex 之間切換（預設停在最近有活動的那家；
+只裝一家的人看不到分頁列，介面跟原本一模一樣）。
+
+直接指定 rollout 檔也可以（格式自動辨識，不用旗標）：
 
 ```bash
 grammar-watch ~/.codex/sessions/YYYY/MM/DD/rollout-xxx.jsonl
 ```
 
-自動跟隨對 Codex 一樣有效（`/new`、`/clear` 開新檔會自動接上）。
-互動式選單目前只列 Claude Code 的 session，Codex 的選單整合開發中。
+「等待下一個新 Session」和自動跟隨（`/new`、`/clear`）對 Codex 同樣有效，
+包含跨午夜換日期資料夾的情況。
 
 ## Claude Code 的 session jsonl 在哪
 
