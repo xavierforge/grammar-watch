@@ -7,14 +7,19 @@
 
 ## 安裝
 
-不需要 Rust 工具鏈，擇一即可：
+不需要 Rust 工具鏈，依平台擇一即可：
 
 ```bash
-# Homebrew（macOS / Linux）
+# macOS / Linux：Homebrew
 brew install xavierforge/tap/grammar-watch
 
-# 或安裝腳本
+# macOS / Linux：安裝腳本（自動偵測平台，含 Apple Silicon 和 Linux aarch64）
 curl -LsSf https://github.com/xavierforge/grammar-watch/releases/latest/download/grammar-watch-installer.sh | sh
+```
+
+```powershell
+# Windows：PowerShell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/xavierforge/grammar-watch/releases/latest/download/grammar-watch-installer.ps1 | iex"
 ```
 
 有 Rust 的人也可以從原始碼裝：
