@@ -1,9 +1,7 @@
-// transcript.rs
+// transcript/claude.rs
 //
-// 解析 Claude Code session jsonl 的「單行事件」，抽出真正是使用者手打的文字。
-// jsonl 的格式知識（user 行、queue-operation、被塞進 user 輪的機器文字…）
-// 全部關在這個模組裡；監看端（main）和選單預覽（picker）都只用
-// extract_user_text 這一個函式。
+// Claude Code 的 session jsonl：~/.claude/projects/<專案編碼>/<uuid>.jsonl。
+// 這裡關著它的格式知識：user 行、queue-operation、被塞進 user 輪的機器文字。
 
 use serde::Deserialize;
 
@@ -44,9 +42,8 @@ struct Block {
     text: Option<String>,
 }
 
-/// 從一行 jsonl 抽出「真正是你手打的文字」，濾掉工具結果等雜訊。
-/// 回傳 None 代表這行不是你打的 prompt（該跳過）。
-pub fn extract_user_text(raw: &str) -> Option<String> {
+/// 認領並抽取一行 Claude Code 事件。不是使用者手打的 prompt 就回 None。
+pub(super) fn extract(raw: &str) -> Option<String> {
     let line: Line = serde_json::from_str(raw).ok()?;
 
     let text = match line.kind.as_deref() {
@@ -90,13 +87,8 @@ pub fn extract_user_text(raw: &str) -> Option<String> {
         _ => return None,
     };
 
-    let text = text.trim().to_string();
-    if text.is_empty() {
-        return None;
-    }
     // Claude Code 會把很多「機器產生的文字」也塞進 user 這一輪：
     // 中斷標記、system-reminder、slash command 展開、local command 輸出…
-    // 這些都含英文字母、會騙過下面的字母檢查，送給模型就會回「這不是 prompt」。
     // 出現任何一個標記就整行跳過。
     const INJECTED_MARKERS: &[&str] = &[
         "[Request interrupted",
@@ -111,16 +103,13 @@ pub fn extract_user_text(raw: &str) -> Option<String> {
     if INJECTED_MARKERS.iter().any(|m| text.contains(m)) {
         return None;
     }
-    // 沒有任何一個 ASCII 英文字母就當作純中文/純指令，跳過
-    if !text.chars().any(|c| c.is_ascii_alphabetic()) {
-        return None;
-    }
     Some(text)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // 測的是完整管線（含 mod.rs 的共用過濾），跟實際呼叫端走同一條路
+    use crate::transcript::extract_user_text;
 
     #[test]
     fn user_line_with_string_content() {
