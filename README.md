@@ -1,9 +1,12 @@
 # grammar-watch
 
-監看單一 Claude Code session 的 jsonl，偵測到你新打的 prompt 就送給 LLM，
-在終端機印出「你打了什麼 / 建議怎麼打 / 文法或單字的改進點」。
+監看 coding agent（**Claude Code**、**OpenAI Codex**）的 session 紀錄，
+偵測到你新打的 prompt 就送給 LLM，在終端機印出
+「你打了什麼 / 建議怎麼打 / 文法或單字的改進點」。
 
-![demo：左邊打 prompt 給 Claude Code，右邊即時講評英文](demo/demo.gif)
+在另一個 tmux window 或 Herdr pane 跑它，工作時瞄一眼即可。
+
+![demo：左邊打 prompt 給 coding agent，右邊即時講評英文](demo/demo.gif)
 
 ## 安裝
 
@@ -36,24 +39,24 @@ export ANTHROPIC_API_KEY=sk-...
 # 不帶參數：互動式選單（推薦）
 grammar-watch
 
-# 或直接指定檔案
-grammar-watch /path/to/session.jsonl
+# 或直接指定 session 檔，兩家格式自動辨識，不用旗標
+grammar-watch ~/.claude/projects/<專案編碼>/<uuid>.jsonl
+grammar-watch ~/.codex/sessions/YYYY/MM/DD/rollout-xxx.jsonl
 ```
-
-在另一個 tmux window 或 Herdr 跑它，工作時瞄一眼即可。
 
 ### 互動式選單
 
-不帶參數啟動會先列出 `~/.claude/projects` 底下的專案（顯示真實路徑、
-session 數、最近活動時間，最新的排最前面），選了專案再選 session
-（顯示時間、session id 前 8 碼、第一句 prompt 的預覽）。
+不帶參數啟動會列出偵測到的專案（真實路徑、session 數、最近活動時間，
+最新的排最前面）。Claude Code 和 Codex 都有在用的話，選單頂部有分頁列、
+**Tab** 切換工具，預設停在最近有活動的那家；只用一家的人不會看到分頁列。
+選了專案再選 session（顯示時間、識別碼、第一句 prompt 的預覽）。
 
-按鍵：↑↓ 移動、Enter 或 → 確認、← 或 Esc 回上一層（← 在專案層沒作用，
-Esc 在專案層是離開）、打字過濾、Ctrl-C 離開。
+按鍵：↑↓ 移動、Tab 換工具、Enter 或 → 確認、← 或 Esc 回上一層
+（← 在專案層沒作用，Esc 在專案層是離開）、打字過濾、Ctrl-C 離開。
 
-session 清單的第一個選項是「**等下一個新 session**」：session 的 jsonl
-要等你打出第一句才會建檔，附著既有檔案永遠會漏掉第一句。選這個選項、
-再去開新的 Claude Code，新檔一出現就自動接上並從頭讀，第一句也不會漏。
+session 清單的第一個選項是「**等待下一個新 Session**」：session 檔要等你
+打出第一句才會建立，附著既有檔案永遠會漏掉第一句。選這個選項、再去開新的
+Claude Code 或 Codex，新檔一出現就自動接上並從頭讀，第一句也不會漏。
 
 ### 供應商與模型
 
@@ -127,33 +130,19 @@ cat ~/gw-journal.md | claude -p "歸納這份英文講評日誌最常見的錯�
 
 搭配 cron 每週一早上跑一次，就是全自動的學習回顧。
 
-### 其他
+### 其他行為
 
 - 預設只看「啟動之後」的新 prompt。要從頭檢查整個 session 加 `--from-start`
-  （`--from_start` 也可）；「等下一個新 session」模式一律從頭讀。
-- **自動跟隨**：監看中若同一個專案出現新的 session（例如你按了 `/clear`
-  或開了新對話），會自動切換過去從頭講評，不用重開。
+  （`--from_start` 也可）；「等待下一個新 Session」模式一律從頭讀。
+- **自動跟隨**：你按 `/clear`（或 Codex 的 `/new`）開出新 session 時會自動
+  切換過去從頭講評，不用重開；Codex 跨午夜換日期資料夾也會跟上。
+- **閒置提醒**：整個監看範圍超過 15 分鐘沒動靜會提示一聲（工具可能已關閉），
+  之後間隔翻倍再提醒。只提醒不退出：session 被 resume 的話會自動接續講評。
 - 純中文或純指令（沒有英文字母）的行會自動跳過。
 
-## 也支援 OpenAI Codex
+## session 紀錄在哪
 
-Codex 的 session 是一等公民：兩家都裝的話，選單頂部會出現分頁列，
-**Tab 鍵**在 Claude Code 和 Codex 之間切換（預設停在最近有活動的那家；
-只裝一家的人看不到分頁列，介面跟原本一模一樣）。
+- Claude Code：`~/.claude/projects/<專案路徑編碼>/<session-uuid>.jsonl`
+- Codex：`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`
 
-直接指定 rollout 檔也可以（格式自動辨識，不用旗標）：
-
-```bash
-grammar-watch ~/.codex/sessions/YYYY/MM/DD/rollout-xxx.jsonl
-```
-
-「等待下一個新 Session」和自動跟隨（`/new`、`/clear`）對 Codex 同樣有效，
-包含跨午夜換日期資料夾的情況。
-
-## Claude Code 的 session jsonl 在哪
-
-通常在：
-```
-~/.claude/projects/<專案路徑編碼>/<session-uuid>.jsonl
-```
-（互動式選單就是幫你翻這個資料夾，不用再手動撈檔名。）
+互動式選單就是幫你翻這些資料夾，不用手動撈檔名。
