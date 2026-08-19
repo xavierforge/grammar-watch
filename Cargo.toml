@@ -31,6 +31,10 @@ crossterm = "0.28"
 unicode-width = "0.2"
 # 錯誤處理
 anyhow = "1"
+# 設定檔解析（~/.config/grammar-watch/config.toml）
+toml = "0.8"
+# 講評日誌的時間戳（只要本地時間，不用完整功能）
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # 算出原句與建議句的差異，逐字標記改了哪裡
 similar = "2"
 

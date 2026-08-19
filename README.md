@@ -64,8 +64,25 @@ session 清單的第一個選項是「**等下一個新 session**」：session �
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...
-./target/release/grammar-watch --provider openrouter --model google/gemini-2.5-flash
+grammar-watch --provider openrouter --model google/gemini-2.5-flash
 ```
+
+### 設定檔（選用）
+
+`~/.config/grammar-watch/config.toml`（設了 `XDG_CONFIG_HOME` 就以它為準）。
+全部欄位都可省略，優先序是 CLI 旗標 > 設定檔 > 內建預設：
+
+```toml
+provider = "openrouter"                 # anthropic / openrouter / gemini / openai
+model = "anthropic/claude-haiku-4.5"    # 省略就用該供應商的預設
+log = "~/gw-journal.md"                 # 等同 --log：講評日誌
+# preamble = """完全自訂講評的 system prompt（進階）"""
+```
+
+### 講評日誌
+
+`--log 檔案`（或設定檔的 `log`）會把每則講評附時間戳追加進檔案：
+你實際打的原文（保留換行）、建議句、講評。拿來回顧自己常犯的錯最有用。
 
 ### 其他
 

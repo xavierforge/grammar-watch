@@ -45,6 +45,17 @@ impl Provider {
         }
     }
 
+    /// 設定檔用：從名字（不分大小寫）解析供應商
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.to_ascii_lowercase().as_str() {
+            "anthropic" => Some(Provider::Anthropic),
+            "openrouter" => Some(Provider::Openrouter),
+            "gemini" => Some(Provider::Gemini),
+            "openai" => Some(Provider::Openai),
+            _ => None,
+        }
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Provider::Anthropic => "anthropic",

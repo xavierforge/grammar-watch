@@ -31,3 +31,13 @@ pub fn tildify(path: &str) -> String {
 pub fn display(path: &Path) -> String {
     tildify(&path.display().to_string())
 }
+
+/// 反向：「~/x」展開成家目錄路徑。設定檔裡寫 ~ 很自然，直接支援。
+pub fn expand_tilde(path: &str) -> std::path::PathBuf {
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return std::path::PathBuf::from(home).join(rest);
+        }
+    }
+    std::path::PathBuf::from(path)
+}
