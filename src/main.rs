@@ -174,6 +174,11 @@ async fn main() -> Result<()> {
     // 先跑一次：從頭讀時要立刻把既有內容讀完，不能乾等下一個事件。
     drain(&path, &mut offset, &ask, log.as_deref()).await?;
 
+    // 閒置感知：範圍內很久沒動靜時提示一聲（工具可能已關閉）。
+    // 只提示不退出：session 隨時可能被 resume，而且閒著的 watcher 沒有成本。
+    let mut last_activity = std::time::Instant::now();
+    let mut idle = IdleNotice::new();
+
     loop {
         // notify 事件只是「趕快讀」的提示；真正保證讀到的是每 500ms timeout 的輪詢。
         // 這很重要：notify 在寫入爆量時（一輪結束＋下一輪開始）可能漏事件，
@@ -198,18 +203,91 @@ async fn main() -> Result<()> {
                     "切換到新 session：".green().bold(),
                     paths::display(&path).dimmed()
                 );
+                last_activity = std::time::Instant::now();
             }
             Ok(None) => {}
             Err(e) => eprintln!("{} {}", "掃描專案失敗：".red(), e),
         }
 
         // drain 的錯誤不該讓整個程式掛掉（例如寫入當下短暫開檔失敗），記一下繼續輪詢。
+        let before = offset;
         if let Err(e) = drain(&path, &mut offset, &ask, log.as_deref()).await {
             eprintln!("{} {}", "讀取失敗：".red(), e);
+        }
+        if offset != before {
+            last_activity = std::time::Instant::now();
+        }
+
+        if let Some(msg) = idle.check(last_activity.elapsed(), offset != before) {
+            println!("{}", msg.dimmed());
         }
     }
 
     Ok(())
+}
+
+/// 閒置提示的節奏：15 分鐘先提示一次，之後門檻翻倍（30 分、1 小時…），
+/// 有任何動靜就重置，不會洗版。
+struct IdleNotice {
+    next_after: Duration,
+}
+
+impl IdleNotice {
+    const FIRST: Duration = Duration::from_secs(15 * 60);
+
+    fn new() -> Self {
+        Self { next_after: Self::FIRST }
+    }
+
+    /// 每個輪詢 tick 呼叫；跨過目前門檻時回傳要印的提示文字
+    fn check(&mut self, idle_for: Duration, active: bool) -> Option<String> {
+        if active {
+            self.next_after = Self::FIRST;
+            return None;
+        }
+        if idle_for < self.next_after {
+            return None;
+        }
+        let mins = self.next_after.as_secs() / 60;
+        let label = if mins < 60 {
+            format!("{mins} 分鐘")
+        } else {
+            format!("{} 小時", mins / 60)
+        };
+        self.next_after *= 2;
+        Some(format!(
+            "（已閒置 {label}：工具可能已關閉。session 被 resume 會自動接續；Ctrl-C 結束）"
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn idle_notice_fires_once_per_threshold_and_doubles() {
+        let mut idle = IdleNotice::new();
+        let m = |n: u64| Duration::from_secs(n * 60);
+        assert!(idle.check(m(14), false).is_none());
+        let first = idle.check(m(15), false);
+        assert!(first.is_some_and(|s| s.contains("15 分鐘")));
+        // 同一個門檻不重複提示；下一次是 30 分鐘
+        assert!(idle.check(m(16), false).is_none());
+        assert!(idle.check(m(30), false).is_some_and(|s| s.contains("30 分鐘")));
+        // 再下一次翻倍成 1 小時
+        assert!(idle.check(m(60), false).is_some_and(|s| s.contains("1 小時")));
+    }
+
+    #[test]
+    fn idle_notice_resets_on_activity() {
+        let mut idle = IdleNotice::new();
+        let m = |n: u64| Duration::from_secs(n * 60);
+        assert!(idle.check(m(15), false).is_some());
+        // 有動靜：門檻回到 15 分鐘重新計
+        assert!(idle.check(m(0), true).is_none());
+        assert!(idle.check(m(15), false).is_some_and(|s| s.contains("15 分鐘")));
+    }
 }
 
 /// 從 offset 讀出所有「完整的新行」，逐行講評，並把 offset 前進到已消化的位元組。
