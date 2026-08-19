@@ -182,6 +182,21 @@ pub(crate) fn sessions_in(dir: &Path) -> Result<Vec<Session>> {
     Ok(out)
 }
 
+/// 掃 jsonl 開頭時每檔最多讀這麼多位元組：單行可以到幾百 KB
+/// （assistant 回覆、tool 結果都在裡面），不設上限會讓選單開很慢。
+const HEAD_BYTES: u64 = 64 * 1024;
+
+/// 開檔讀前 HEAD_BYTES，逐行回傳（讀壞的行直接停）。
+/// read_cwd 和 first_prompt_snippet 都只需要看檔案開頭。
+fn read_head(path: &Path) -> Option<impl Iterator<Item = String>> {
+    let file = fs::File::open(path).ok()?;
+    Some(
+        BufReader::new(std::io::Read::take(file, HEAD_BYTES))
+            .lines()
+            .map_while(Result::ok),
+    )
+}
+
 /// jsonl 每行事件幾乎都帶 cwd 欄位；掃前幾行拿到就收工
 #[derive(Deserialize)]
 struct CwdLine {
@@ -189,9 +204,7 @@ struct CwdLine {
 }
 
 fn read_cwd(path: &Path) -> Option<String> {
-    let file = fs::File::open(path).ok()?;
-    let reader = BufReader::new(std::io::Read::take(file, 64 * 1024));
-    for line in reader.lines().take(10).map_while(Result::ok) {
+    for line in read_head(path)?.take(10) {
         if let Ok(l) = serde_json::from_str::<CwdLine>(&line) {
             if let Some(c) = l.cwd {
                 return Some(c);
@@ -202,18 +215,14 @@ fn read_cwd(path: &Path) -> Option<String> {
 }
 
 /// 抓 session 裡第一句「真的是使用者手打」的 prompt 當預覽，
-/// 沿用 main 的 extract_user_text 過濾規則。
-/// 只讀每個檔案開頭 64KB、最多 80 行：jsonl 的單行可以到幾百 KB
-/// （assistant 回覆、tool 結果都在裡面），全部 serde 掃一遍會讓選單開很慢。
+/// 沿用 transcript 的 extract_user_text 過濾規則。最多看 80 行；
 /// 先用字串比對挑出可能是 user 的行，其他行連 parse 都不用。
 fn first_prompt_snippet(path: &Path) -> Option<String> {
-    let file = fs::File::open(path).ok()?;
-    let reader = BufReader::new(std::io::Read::take(file, 64 * 1024));
-    for line in reader.lines().take(80).map_while(Result::ok) {
+    for line in read_head(path)?.take(80) {
         if !line.contains(r#""type":"user""#) && !line.contains(r#""type":"queue-operation""#) {
             continue;
         }
-        if let Some(text) = crate::extract_user_text(&line) {
+        if let Some(text) = crate::transcript::extract_user_text(&line) {
             let one_line: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
             return Some(truncate_chars(&one_line, 48));
         }
