@@ -63,13 +63,13 @@ impl Config {
     }
 }
 
-/// 設定檔位置：$XDG_CONFIG_HOME（或 ~/.config）/grammar-watch/config.toml
+/// 設定檔位置：$XDG_CONFIG_HOME（或 ~/.config）/grammar-watch/config.toml。
+/// Windows 沒有 XDG 慣例，就直接用家目錄下的 .config，路徑各平台一致最好記。
 fn config_path() -> Option<PathBuf> {
     if let Ok(x) = std::env::var("XDG_CONFIG_HOME") {
         return Some(PathBuf::from(x).join("grammar-watch").join("config.toml"));
     }
-    std::env::var("HOME")
-        .ok()
+    paths::home()
         .map(|h| PathBuf::from(h).join(".config").join("grammar-watch").join("config.toml"))
 }
 

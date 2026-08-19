@@ -9,13 +9,20 @@
 
 use std::path::{Path, PathBuf};
 
+/// 家目錄：Unix 讀 HOME；Windows 的 PowerShell 沒有 HOME，退而讀 USERPROFILE
+pub fn home() -> Option<String> {
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok()
+}
+
 /// $HOME 前綴縮成 ~。
 /// Claude Code 會把專案路徑編碼成資料夾名稱（/Users/xxx → -Users-xxx），
 /// 那個形式一樣會洩漏帳號名稱，所以編碼過的家目錄也一併縮成 ~。
 pub fn tildify(path: &str) -> String {
-    match std::env::var("HOME") {
-        Ok(home) => tildify_with(path, &home),
-        Err(_) => path.to_string(),
+    match home() {
+        Some(home) => tildify_with(path, &home),
+        None => path.to_string(),
     }
 }
 
@@ -41,9 +48,9 @@ pub fn display(path: &Path) -> String {
 
 /// 反向：「~/x」展開成家目錄路徑。設定檔裡寫 ~ 很自然，直接支援。
 pub fn expand_tilde(path: &str) -> PathBuf {
-    match std::env::var("HOME") {
-        Ok(home) => expand_tilde_with(path, &home),
-        Err(_) => PathBuf::from(path),
+    match home() {
+        Some(home) => expand_tilde_with(path, &home),
+        None => PathBuf::from(path),
     }
 }
 

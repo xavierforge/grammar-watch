@@ -93,9 +93,14 @@ async fn main() -> Result<()> {
     // 先建 agent 再進選單：缺 API key 就立刻報錯，不要讓人選完 session 才發現
     let ask = providers::build(provider, &model, preamble)?;
 
-    // 開場先清畫面（ESC[2J 只清可視區、不動 scrollback），
-    // 之後不管是進選單還是直接開始監看，畫面都是乾淨的。
-    print!("\x1b[2J\x1b[H");
+    // 開場先清畫面（只清可視區、不動 scrollback），之後不管是進選單
+    // 還是直接開始監看，畫面都是乾淨的。走 crossterm 而不是裸印 ANSI 碼，
+    // 舊版 Windows console 才不會印出一串亂碼。
+    let _ = crossterm::execute!(
+        std::io::stdout(),
+        crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
+        crossterm::cursor::MoveTo(0, 0)
+    );
 
     // 沒給路徑就開互動式選單。「等新 session」回傳的檔案一定要從頭讀：
     // jsonl 是打出第一句才建檔的，不從頭讀第一句就永遠漏掉。

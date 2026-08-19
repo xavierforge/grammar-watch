@@ -125,7 +125,7 @@ impl Project {
 
 /// Claude Code 存所有 session 的根目錄：~/.claude/projects
 fn projects_root() -> Result<PathBuf> {
-    let home = std::env::var("HOME").context("讀不到 HOME 環境變數")?;
+    let home = crate::paths::home().context("讀不到家目錄（HOME 或 USERPROFILE 環境變數）")?;
     Ok(PathBuf::from(home).join(".claude").join("projects"))
 }
 
