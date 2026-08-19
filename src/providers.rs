@@ -83,6 +83,27 @@ where
     })
 }
 
+/// 講評要的是穩定一致的輸出，不是創意發揮，所以溫度壓低
+const TEMPERATURE: f64 = 0.3;
+
+/// 泛型建構：不同供應商只差 client 型別，其餘（from_env、agent 鏈）都一樣。
+/// where 的最後一條直接寫出 wrap 需要的能力，剩下讓編譯器推。
+fn agent_from_env<C>(model: &str, preamble: &str) -> Result<Asker>
+where
+    C: ProviderClient + CompletionClient,
+    C::Error: std::error::Error + Send + Sync + 'static,
+    rig::agent::Agent<<C as CompletionClient>::CompletionModel>: Prompt + Send + Sync + 'static,
+{
+    let client = C::from_env()?;
+    Ok(wrap(
+        client
+            .agent(model)
+            .preamble(preamble)
+            .temperature(TEMPERATURE)
+            .build(),
+    ))
+}
+
 /// 建立指定供應商的 agent。金鑰一律走環境變數（rig 的 from_env），
 /// 這裡先自己檢查一次，缺了就給出比 rig 錯誤更直白的訊息。
 pub fn build(provider: Provider, model: &str, preamble: &str) -> Result<Asker> {
@@ -96,39 +117,11 @@ pub fn build(provider: Provider, model: &str, preamble: &str) -> Result<Asker> {
         );
     }
 
-    let ctx = || format!("建立 {} client 失敗", provider.name());
-    Ok(match provider {
-        Provider::Anthropic => wrap(
-            anthropic::Client::from_env()
-                .with_context(ctx)?
-                .agent(model)
-                .preamble(preamble)
-                .temperature(0.3)
-                .build(),
-        ),
-        Provider::Openrouter => wrap(
-            openrouter::Client::from_env()
-                .with_context(ctx)?
-                .agent(model)
-                .preamble(preamble)
-                .temperature(0.3)
-                .build(),
-        ),
-        Provider::Gemini => wrap(
-            gemini::Client::from_env()
-                .with_context(ctx)?
-                .agent(model)
-                .preamble(preamble)
-                .temperature(0.3)
-                .build(),
-        ),
-        Provider::Openai => wrap(
-            openai::Client::from_env()
-                .with_context(ctx)?
-                .agent(model)
-                .preamble(preamble)
-                .temperature(0.3)
-                .build(),
-        ),
-    })
+    match provider {
+        Provider::Anthropic => agent_from_env::<anthropic::Client>(model, preamble),
+        Provider::Openrouter => agent_from_env::<openrouter::Client>(model, preamble),
+        Provider::Gemini => agent_from_env::<gemini::Client>(model, preamble),
+        Provider::Openai => agent_from_env::<openai::Client>(model, preamble),
+    }
+    .with_context(|| format!("建立 {} client 失敗", provider.name()))
 }
