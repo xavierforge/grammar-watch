@@ -85,27 +85,10 @@ const PREAMBLE: &str = r#"你是一個給台灣工程師看的英文 prompt 教�
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    // 設定檔（選用）：CLI 旗標 > 設定檔 > 內建預設
-    let cfg = config::load()?;
-    let provider = match args.provider {
-        Some(p) => p,
-        None => match &cfg.provider {
-            Some(name) => Provider::from_name(name).with_context(|| {
-                format!("設定檔的 provider 不認得：{name}（可用：anthropic / openrouter / gemini / openai）")
-            })?,
-            None => Provider::Anthropic,
-        },
-    };
-    let model = args
-        .model
-        .clone()
-        .or(cfg.model)
-        .unwrap_or_else(|| provider.default_model().to_string());
+    // 設定檔（選用）：CLI 旗標 > 設定檔 > 內建預設，合併邏輯在 config::resolve
+    let cfg = config::load()?.resolve(args.provider, args.model.clone(), args.log.clone())?;
+    let (provider, model, log) = (cfg.provider, cfg.model, cfg.log);
     let preamble = cfg.preamble.as_deref().unwrap_or(PREAMBLE);
-    let log = args
-        .log
-        .clone()
-        .or_else(|| cfg.log.as_deref().map(paths::expand_tilde));
 
     // 先建 agent 再進選單：缺 API key 就立刻報錯，不要讓人選完 session 才發現
     let ask = providers::build(provider, &model, preamble)?;

@@ -13,6 +13,9 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
+use crate::paths;
+use crate::providers::Provider;
+
 #[derive(Deserialize, Default, Debug, PartialEq)]
 // 打錯欄位名要直接報錯，不能沉默忽略讓人以為設定有生效
 #[serde(deny_unknown_fields)]
@@ -21,6 +24,43 @@ pub struct Config {
     pub model: Option<String>,
     pub preamble: Option<String>,
     pub log: Option<String>,
+}
+
+/// CLI 旗標、設定檔、內建預設三層合併後的定案值
+pub struct Resolved {
+    pub provider: Provider,
+    pub model: String,
+    /// None = 用內建的 PREAMBLE
+    pub preamble: Option<String>,
+    pub log: Option<PathBuf>,
+}
+
+impl Config {
+    /// 套用優先序：CLI 旗標 > 設定檔 > 內建預設。
+    /// 設定檔裡亂寫的 provider 要報錯，不能沉默退回預設。
+    pub fn resolve(
+        self,
+        cli_provider: Option<Provider>,
+        cli_model: Option<String>,
+        cli_log: Option<PathBuf>,
+    ) -> Result<Resolved> {
+        let provider = match cli_provider {
+            Some(p) => p,
+            None => match &self.provider {
+                Some(name) => Provider::from_name(name).with_context(|| {
+                    format!(
+                        "設定檔的 provider 不認得：{name}（可用：anthropic / openrouter / gemini / openai）"
+                    )
+                })?,
+                None => Provider::Anthropic,
+            },
+        };
+        let model = cli_model
+            .or(self.model)
+            .unwrap_or_else(|| provider.default_model().to_string());
+        let log = cli_log.or_else(|| self.log.as_deref().map(paths::expand_tilde));
+        Ok(Resolved { provider, model, preamble: self.preamble, log })
+    }
 }
 
 /// 設定檔位置：$XDG_CONFIG_HOME（或 ~/.config）/grammar-watch/config.toml
@@ -76,5 +116,41 @@ preamble = "自訂"
     fn unknown_field_is_an_error() {
         // 打錯欄位名（例如 provder）必須報錯，不能讓人以為有生效
         assert!(toml::from_str::<Config>(r#"provder = "openai""#).is_err());
+    }
+
+    #[test]
+    fn cli_flag_beats_config() {
+        let cfg = Config { provider: Some("openrouter".into()), ..Default::default() };
+        let r = cfg.resolve(Some(Provider::Gemini), None, None).unwrap();
+        assert!(matches!(r.provider, Provider::Gemini));
+        // model 未指定 → 跟著定案後的 provider 走預設
+        assert_eq!(r.model, Provider::Gemini.default_model());
+    }
+
+    #[test]
+    fn config_beats_builtin_default() {
+        let cfg = Config {
+            provider: Some("openrouter".into()),
+            model: Some("some/model".into()),
+            ..Default::default()
+        };
+        let r = cfg.resolve(None, None, None).unwrap();
+        assert!(matches!(r.provider, Provider::Openrouter));
+        assert_eq!(r.model, "some/model");
+    }
+
+    #[test]
+    fn everything_omitted_falls_back_to_anthropic() {
+        let r = Config::default().resolve(None, None, None).unwrap();
+        assert!(matches!(r.provider, Provider::Anthropic));
+        assert_eq!(r.model, Provider::Anthropic.default_model());
+        assert!(r.log.is_none());
+        assert!(r.preamble.is_none());
+    }
+
+    #[test]
+    fn bad_provider_in_config_is_an_error() {
+        let cfg = Config { provider: Some("gpt".into()), ..Default::default() };
+        assert!(cfg.resolve(None, None, None).is_err());
     }
 }
