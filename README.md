@@ -131,3 +131,12 @@ cat ~/gw-journal.md | claude -p "歸納這份英文講評日誌最常見的錯�
 - Codex：`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`
 
 互動式選單會幫你翻這些資料夾，不用手動撈檔名。
+
+## License
+
+依 Rust 生態慣例採 MIT / Apache-2.0 雙授權，可任擇其一使用：
+
+- [MIT License](LICENSE-MIT)
+- [Apache License, Version 2.0](LICENSE-APACHE)
+
+除非你另有明確聲明，你提交到本專案的任何貢獻（依 Apache-2.0 授權中的定義）都視為同意以上述雙授權釋出，不附加其他條款。
