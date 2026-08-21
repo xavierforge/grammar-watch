@@ -20,6 +20,12 @@ pub struct Feedback {
 /// 所以要把沒有標籤的後續行「累加回目前所在的段落」，
 /// 不能只抓標籤那一行，否則原句／建議會只剩第一行。
 pub fn parse(text: &str) -> Feedback {
+    // 模型回覆會原樣印到終端機、寫進日誌。先濾掉控制字元（保留換行和 tab），
+    // 否則回覆裡混進 \x1b 之類的跳脫序列就能清畫面、動游標（escape injection）。
+    // is_control 涵蓋 C0、DEL 和 C1，各終端機認得的跳脫起點都在裡面。
+    let text: String =
+        text.chars().filter(|c| !c.is_control() || *c == '\n' || *c == '\t').collect();
+
     #[derive(PartialEq)]
     enum Sec {
         None,
@@ -178,6 +184,14 @@ fn highlight(orig: &str, sugg: &str, side: Side) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn control_chars_stripped_but_newline_kept() {
+        // \x1b（ANSI 跳脫）、\r、C1（U+009B CSI）都要濾掉；換行是段落結構，要留
+        let fb = parse("原句：I \x1b[2Jhas\r a\u{9b}31m apple\n建議：I have an apple");
+        assert_eq!(fb.orig.as_deref(), Some("I [2Jhas a31m apple"));
+        assert_eq!(fb.sugg.as_deref(), Some("I have an apple"));
+    }
 
     #[test]
     fn three_sections_parsed() {
