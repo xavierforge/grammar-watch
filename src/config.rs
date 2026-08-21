@@ -6,7 +6,7 @@
 //   provider = "openrouter"               # anthropic / openrouter / gemini / openai
 //   model = "anthropic/claude-haiku-4.5"  # 省略就用該供應商的預設
 //   log = "~/gw-journal.md"               # 等同 --log：講評日誌
-//   preamble = """自訂講評的 system prompt（進階）"""
+//   extra = """講評改用英文"""            # 等同 --extra：補充講評偏好（語言、語氣）
 
 use std::path::PathBuf;
 
@@ -22,7 +22,7 @@ use crate::providers::Provider;
 pub struct Config {
     pub provider: Option<String>,
     pub model: Option<String>,
-    pub preamble: Option<String>,
+    pub extra: Option<String>,
     pub log: Option<String>,
 }
 
@@ -30,8 +30,9 @@ pub struct Config {
 pub struct Resolved {
     pub provider: Provider,
     pub model: String,
-    /// None = 用內建的 PREAMBLE
-    pub preamble: Option<String>,
+    /// 補充講評偏好（語言、語氣）；None = 不附加，用內建預設。
+    /// 只會夾進 system prompt 的中段，素材防護與輸出格式蓋不掉（見 main 的 compose_preamble）
+    pub extra: Option<String>,
     pub log: Option<PathBuf>,
 }
 
@@ -43,6 +44,7 @@ impl Config {
         cli_provider: Option<Provider>,
         cli_model: Option<String>,
         cli_log: Option<PathBuf>,
+        cli_extra: Option<String>,
     ) -> Result<Resolved> {
         let provider = match cli_provider {
             Some(p) => p,
@@ -59,7 +61,8 @@ impl Config {
             .or(self.model)
             .unwrap_or_else(|| provider.default_model().to_string());
         let log = cli_log.or_else(|| self.log.as_deref().map(paths::expand_tilde));
-        Ok(Resolved { provider, model, preamble: self.preamble, log })
+        let extra = cli_extra.or(self.extra);
+        Ok(Resolved { provider, model, extra, log })
     }
 }
 
@@ -96,14 +99,21 @@ mod tests {
 provider = "openrouter"
 model = "anthropic/claude-haiku-4.5"
 log = "~/j.md"
-preamble = "自訂"
+extra = "講評改用英文"
 "#,
         )
         .unwrap();
         assert_eq!(cfg.provider.as_deref(), Some("openrouter"));
         assert_eq!(cfg.model.as_deref(), Some("anthropic/claude-haiku-4.5"));
         assert_eq!(cfg.log.as_deref(), Some("~/j.md"));
-        assert_eq!(cfg.preamble.as_deref(), Some("自訂"));
+        assert_eq!(cfg.extra.as_deref(), Some("講評改用英文"));
+    }
+
+    #[test]
+    fn removed_preamble_field_is_an_error() {
+        // preamble（全覆蓋 system prompt）已在 0.5 移除，改用 extra（補充式）。
+        // 舊設定檔還寫著它時要報錯，不能讓人以為還有生效
+        assert!(toml::from_str::<Config>(r#"preamble = "自訂""#).is_err());
     }
 
     #[test]
@@ -121,7 +131,7 @@ preamble = "自訂"
     #[test]
     fn cli_flag_beats_config() {
         let cfg = Config { provider: Some("openrouter".into()), ..Default::default() };
-        let r = cfg.resolve(Some(Provider::Gemini), None, None).unwrap();
+        let r = cfg.resolve(Some(Provider::Gemini), None, None, None).unwrap();
         assert!(matches!(r.provider, Provider::Gemini));
         // model 未指定 → 跟著定案後的 provider 走預設
         assert_eq!(r.model, Provider::Gemini.default_model());
@@ -134,23 +144,30 @@ preamble = "自訂"
             model: Some("some/model".into()),
             ..Default::default()
         };
-        let r = cfg.resolve(None, None, None).unwrap();
+        let r = cfg.resolve(None, None, None, None).unwrap();
         assert!(matches!(r.provider, Provider::Openrouter));
         assert_eq!(r.model, "some/model");
     }
 
     #[test]
     fn everything_omitted_falls_back_to_anthropic() {
-        let r = Config::default().resolve(None, None, None).unwrap();
+        let r = Config::default().resolve(None, None, None, None).unwrap();
         assert!(matches!(r.provider, Provider::Anthropic));
         assert_eq!(r.model, Provider::Anthropic.default_model());
         assert!(r.log.is_none());
-        assert!(r.preamble.is_none());
+        assert!(r.extra.is_none());
+    }
+
+    #[test]
+    fn cli_extra_beats_config_extra() {
+        let cfg = Config { extra: Some("設定檔".into()), ..Default::default() };
+        let r = cfg.resolve(None, None, None, Some("旗標".into())).unwrap();
+        assert_eq!(r.extra.as_deref(), Some("旗標"));
     }
 
     #[test]
     fn bad_provider_in_config_is_an_error() {
         let cfg = Config { provider: Some("gpt".into()), ..Default::default() };
-        assert!(cfg.resolve(None, None, None).is_err());
+        assert!(cfg.resolve(None, None, None, None).is_err());
     }
 }

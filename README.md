@@ -81,8 +81,22 @@ grammar-watch --provider openrouter --model google/gemini-2.5-flash
 provider = "openrouter"                 # anthropic / openrouter / gemini / openai
 model = "anthropic/claude-haiku-4.5"    # 省略就用該供應商的預設
 log = "~/gw-journal.md"                 # 等同 --log：講評日誌
-# preamble = """完全自訂講評的 system prompt（進階）"""
+# extra = """講評改用英文"""            # 等同 --extra：補充講評偏好（語言、語氣）
 ```
+
+### 講評語言與風格（選用）
+
+講評預設用繁體中文。想換語言或調整語氣，用 `--extra` 旗標或設定檔的 `extra` 欄位補充偏好：
+
+```bash
+# 臨時：加旗標
+grammar-watch --extra "講評改用英文"
+
+# 常駐：寫進設定檔
+echo 'extra = "講評改用日文，語氣輕鬆一點"' >> ~/.config/grammar-watch/config.toml
+```
+
+0.4 以前的 `preamble` 欄位（完全自訂 system prompt）已移除，設定檔如果還有會直接報錯。現行的 `extra` 只能調整語言和風格。
 
 ### 講評日誌
 
