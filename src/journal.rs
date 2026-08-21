@@ -33,11 +33,16 @@ fn entry(timestamp: &str, prompt: &str, fb: &Feedback) -> String {
 pub fn append(path: &Path, prompt: &str, fb: &Feedback) {
     let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let text = entry(&ts, prompt, fb);
-    let res = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .and_then(|mut f| f.write_all(text.as_bytes()));
+    let mut opts = std::fs::OpenOptions::new();
+    opts.create(true).append(true);
+    // 日誌存著所有 prompt 的副本：建檔時鎖成只有自己可讀寫（600）。
+    // mode 只在「建立新檔」時生效，既有檔案的權限不會被動到。
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let res = opts.open(path).and_then(|mut f| f.write_all(text.as_bytes()));
     if let Err(e) = res {
         eprintln!("寫入日誌失敗（{}）：{e}", path.display());
     }
@@ -66,5 +71,18 @@ mod tests {
         let fb = Feedback::default();
         let e = entry("t", "line one\nline two", &fb);
         assert!(e.contains("原文：line one\nline two\n"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn log_file_created_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let path =
+            std::env::temp_dir().join(format!("gw-journal-perm-test-{}.md", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        append(&path, "hello", &Feedback::default());
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(mode, 0o600);
     }
 }
