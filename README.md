@@ -29,6 +29,16 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/xavierforge/gramma
 cargo install --git https://github.com/xavierforge/grammar-watch
 ```
 
+### 更新
+
+Homebrew 裝的用 upgrade：
+
+```bash
+brew upgrade grammar-watch
+```
+
+安裝腳本和 PowerShell 裝的，重跑一次上面的安裝指令就是最新版；cargo 裝的重跑時加上 `--force`。更新後記得重啟正在跑的 grammar-watch 才會生效。
+
 ## 使用說明
 
 ```bash
