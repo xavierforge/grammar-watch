@@ -93,6 +93,8 @@ pub(super) fn extract(raw: &str) -> Option<String> {
     const INJECTED_MARKERS: &[&str] = &[
         "[Request interrupted",
         "<system-reminder>",
+        // 背景任務完成通知：存成 user 行、裸的 XML、沒有 system-reminder 包裝
+        "<task-notification>",
         "<command-name>",
         "<command-message>",
         "<command-args>",
@@ -153,6 +155,14 @@ mod tests {
     #[test]
     fn injected_marker_skipped() {
         let raw = r#"{"type":"user","message":{"role":"user","content":"<system-reminder>stuff</system-reminder>"}}"#;
+        assert_eq!(extract_user_text(raw), None);
+    }
+
+    #[test]
+    fn task_notification_skipped() {
+        // 背景任務通知是 user 行 + 裸 XML，沒有其他可辨識的欄位，
+        // 不濾掉就會被當成使用者打的 prompt 送去講評
+        let raw = r#"{"type":"user","message":{"role":"user","content":"<task-notification>\n<task-id>abc123</task-id>\n<status>completed</status>\n</task-notification>"}}"#;
         assert_eq!(extract_user_text(raw), None);
     }
 
