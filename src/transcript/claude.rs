@@ -19,6 +19,10 @@ struct Line {
     // operation 為 enqueue/remove/dequeue，排隊的原文放在頂層的 content 欄位。
     operation: Option<String>,
     content: Option<String>,
+    // 機器注入的 user 行（Skill 載入的整份 SKILL.md、image 通知、
+    // local-command caveat…）標成 isMeta: true；手打 prompt 沒有這個欄位。
+    #[serde(rename = "isMeta")]
+    is_meta: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -45,6 +49,12 @@ struct Block {
 /// 認領並抽取一行 Claude Code 事件。不是使用者手打的 prompt 就回 None。
 pub(super) fn extract(raw: &str) -> Option<String> {
     let line: Line = serde_json::from_str(raw).ok()?;
+
+    // isMeta: true 是機器注入行的結構化記號。Skill 展開（/begin、Skill 工具）
+    // 沒有任何字串標記可認，全靠這個欄位擋，不擋整份 SKILL.md 會被送去講評。
+    if line.is_meta == Some(true) {
+        return None;
+    }
 
     let text = match line.kind.as_deref() {
         // 一般（送出時螢幕上打的）prompt：存成 user 行，文字在 message.content。
@@ -163,6 +173,16 @@ mod tests {
         // 背景任務通知是 user 行 + 裸 XML，沒有其他可辨識的欄位，
         // 不濾掉就會被當成使用者打的 prompt 送去講評
         let raw = r#"{"type":"user","message":{"role":"user","content":"<task-notification>\n<task-id>abc123</task-id>\n<status>completed</status>\n</task-notification>"}}"#;
+        assert_eq!(extract_user_text(raw), None);
+    }
+
+    #[test]
+    fn skill_injection_skipped() {
+        // Skill 載入（/begin 或 Skill 工具）會把整份 SKILL.md 存成 user 行的
+        // text block，沒有 command-name 之類標記，只有頂層 isMeta: true 可認
+        let raw = r#"{"type":"user","isMeta":true,"message":{"role":"user","content":[
+            {"type":"text","text":"Base directory for this skill: /Users/x/.claude/skills/begin\n\nDo the workflow steps in order."}
+        ]}}"#;
         assert_eq!(extract_user_text(raw), None);
     }
 
