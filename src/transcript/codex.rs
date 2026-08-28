@@ -49,6 +49,9 @@ const INJECTED_MARKERS: &[&str] = &[
     "<skill>",
     // 推薦 plugin 清單也存成 user message（實測 2026-08 版本）
     "<recommended_plugins>",
+    // 0.150.x 起 AGENTS.md 全文注入成 user message，開頭是這個標題
+    // （舊版走 <user_instructions> 包裝，上面那個標記留著擋舊版）
+    "# AGENTS.md instructions",
 ];
 
 /// 認領並抽取一行 Codex rollout。不是 Codex 的 user prompt 就回 None。
@@ -115,6 +118,13 @@ mod tests {
         // $skill 呼叫時整份 SKILL.md 注入成獨立 user message，
         // 包在 <skill>…</skill>，不擋就整份被送去講評
         let raw = r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<skill>\n<name>begin</name>\n<path>/x/SKILL.md</path>\n---\nname: begin\n---\nDo the workflow steps in order.\n</skill>"}]}}"#;
+        assert_eq!(extract_user_text(raw), None);
+    }
+
+    #[test]
+    fn agents_md_injection_skipped() {
+        // 0.150.x 的 AGENTS.md 注入（實測形狀）：標題行 + <INSTRUCTIONS> 包全文
+        let raw = r##"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md instructions for /x/proj\n\n<INSTRUCTIONS>\nReply with one short sentence.\n</INSTRUCTIONS>"}]}}"##;
         assert_eq!(extract_user_text(raw), None);
     }
 
