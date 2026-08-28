@@ -100,7 +100,10 @@ impl<T> Menu<'_, T> {
         };
 
         let mut lines: Vec<String> = Vec::new();
-        lines.push(format!("{} {}{}", "?".green().bold(), self.title.bold(), self.filter));
+        // 標題＋過濾字同樣不能折行（見 fit 的註解）：過濾字截到剩餘寬度。
+        // 各行都用 width-1 留一格，避免剛好貼齊寬度時游標懸掛在行尾的邊界情況
+        let filter = fit(&self.filter, (width - 1).saturating_sub(2 + disp_width(self.title)));
+        lines.push(format!("{} {}{}", "?".green().bold(), self.title.bold(), filter));
         // 分頁列：目前頁亮、其他頁暗
         if let Some((labels, active)) = self.tabs {
             let row = labels
@@ -142,7 +145,8 @@ impl<T> Menu<'_, T> {
             lines.push(if selected { line.cyan().bold().to_string() } else { line });
             lines.push(String::new());
         }
-        lines.push(format!("[{}]", self.help).dimmed().to_string());
+        // 說明列是最長的固定文字（窄 pane 必折行），一樣要截
+        lines.push(fit(&format!("[{}]", self.help), width - 1).dimmed().to_string());
 
         if self.drawn > 0 {
             queue!(
@@ -261,7 +265,7 @@ fn clear_frame(out: &mut impl Write, drawn: usize) -> Result<()> {
 /// 依「顯示寬度」截斷（CJK 一字兩格），太長補 …。
 /// 選單每列都不能折行，不然重繪時行數對不上、畫面會疊影。
 fn fit(s: &str, max: usize) -> String {
-    let total: usize = s.chars().map(|c| UnicodeWidthChar::width(c).unwrap_or(0)).sum();
+    let total = disp_width(s);
     if total <= max {
         return s.to_string();
     }
@@ -277,6 +281,11 @@ fn fit(s: &str, max: usize) -> String {
     }
     out.push('…');
     out
+}
+
+/// 顯示寬度（CJK 一字兩格）
+fn disp_width(s: &str) -> usize {
+    s.chars().map(|c| UnicodeWidthChar::width(c).unwrap_or(0)).sum()
 }
 
 #[cfg(test)]
