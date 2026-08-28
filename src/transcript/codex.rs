@@ -45,6 +45,10 @@ const INJECTED_MARKERS: &[&str] = &[
     "<collaboration_mode>",
     "<skills_instructions>",
     "<user_instructions>",
+    // $skill 呼叫時整份 SKILL.md 注入成獨立 user message，包在 <skill>…</skill>
+    "<skill>",
+    // 推薦 plugin 清單也存成 user message（實測 2026-08 版本）
+    "<recommended_plugins>",
 ];
 
 /// 認領並抽取一行 Codex rollout。不是 Codex 的 user prompt 就回 None。
@@ -72,6 +76,14 @@ pub(super) fn extract(raw: &str) -> Option<String> {
     if INJECTED_MARKERS.iter().any(|m| buf.contains(m)) {
         return None;
     }
+    // $skill 呼叫（$begin、$skill-name args…）是指令不是英文句子，整行跳過。
+    // 限定「$ 後緊接字母」，才不會誤殺 "$100 is too much" 這種真的句子。
+    let trimmed = buf.trim_start();
+    if trimmed.starts_with('$')
+        && trimmed[1..].chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+    {
+        return None;
+    }
     Some(buf)
 }
 
@@ -96,6 +108,32 @@ mod tests {
     fn environment_context_skipped() {
         let raw = r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>\n  <cwd>/x</cwd>\n</environment_context>"}]}}"#;
         assert_eq!(extract_user_text(raw), None);
+    }
+
+    #[test]
+    fn skill_injection_skipped() {
+        // $skill 呼叫時整份 SKILL.md 注入成獨立 user message，
+        // 包在 <skill>…</skill>，不擋就整份被送去講評
+        let raw = r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<skill>\n<name>begin</name>\n<path>/x/SKILL.md</path>\n---\nname: begin\n---\nDo the workflow steps in order.\n</skill>"}]}}"#;
+        assert_eq!(extract_user_text(raw), None);
+    }
+
+    #[test]
+    fn dollar_skill_invocation_skipped() {
+        let bare = r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"$begin"}]}}"#;
+        let with_args = r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"$skill-name some args"}]}}"#;
+        assert_eq!(extract_user_text(bare), None);
+        assert_eq!(extract_user_text(with_args), None);
+    }
+
+    #[test]
+    fn dollar_amount_sentence_kept() {
+        // 開頭是金額不是 skill 呼叫（$ 後接數字），是真的英文句要講評
+        let raw = r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"$100 is too much for this."}]}}"#;
+        assert_eq!(
+            extract_user_text(raw).as_deref(),
+            Some("$100 is too much for this.")
+        );
     }
 
     #[test]
