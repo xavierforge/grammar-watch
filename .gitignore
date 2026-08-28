@@ -7,7 +7,8 @@ Screenshot*.png
 # 本地審查紀錄（cross-check verdict），給 /ship 之類的工具讀，不進版本庫
 /.review
 
-# demo 錄影產出（README 用的 demo.gif 除外）
+# demo 錄影產出（README 用的 demo.gif 和 Codex 版 demo-codex.gif 除外）
 demo/*.gif
 demo/*.mp4
 !demo/demo.gif
+!demo/demo-codex.gif
